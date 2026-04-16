@@ -447,6 +447,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (attemptInstructionsFilePath && !resumeSessionId) {
       args.push("--append-system-prompt-file", attemptInstructionsFilePath);
     }
+    // Requires Claude CLI ≥ v2.1.112. Moves per-machine dynamic sections (cwd,
+    // env vars, git status, memory paths) from the system prompt into the first
+    // user message, keeping the system prompt byte-identical across wakes and
+    // making it eligible for Anthropic prompt caching. Skip on --resume because
+    // resumed sessions already benefit from session-level context caching.
+    if (!resumeSessionId) {
+      args.push("--exclude-dynamic-system-prompt-sections");
+    }
     args.push("--add-dir", promptBundle.addDir);
     if (extraArgs.length > 0) args.push(...extraArgs);
     return args;
