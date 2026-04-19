@@ -1,5 +1,12 @@
 export { agentAdapterTypeSchema, optionalAgentAdapterTypeSchema } from "./adapter-type.js";
 export {
+  ANTHROPIC_MODEL_PRICING,
+  resolveModelPricing,
+  computeEquivalentCostCents,
+  type TokenUsage,
+  type ModelPricing,
+} from "./pricing.js";
+export {
   COMPANY_STATUSES,
   DEPLOYMENT_MODES,
   DEPLOYMENT_EXPOSURES,
