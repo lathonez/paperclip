@@ -42,6 +42,7 @@ import { pluginStateStore } from "./plugin-state-store.js";
 import { pluginDatabaseService } from "./plugin-database.js";
 import { createPluginSecretsHandler } from "./plugin-secrets-handler.js";
 import { logActivity } from "./activity-log.js";
+import { queueIssueAssignmentWakeup } from "./issue-assignment-wakeup.js";
 import type { PluginEventBus } from "./plugin-event-bus.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
 import { lookup as dnsLookup } from "node:dns/promises";
@@ -1055,6 +1056,15 @@ export function buildHostServices(
             billingCode: issue.billingCode,
             blockedByIssueIds: params.blockedByIssueIds ?? [],
           },
+        });
+        void queueIssueAssignmentWakeup({
+          heartbeat,
+          issue,
+          reason: "issue_assigned",
+          mutation: "create",
+          contextSource: "plugin.issue.create",
+          requestedByActorType: actorAgentId ? "agent" : actorUserId ? "user" : "system",
+          requestedByActorId: actorAgentId ?? actorUserId ?? null,
         });
         return issue;
       },
