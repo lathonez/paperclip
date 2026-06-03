@@ -307,7 +307,7 @@ export async function createApp(
     ];
     const uiDist = candidates.find((p) => fs.existsSync(path.join(p, "index.html")));
     if (uiDist) {
-      const indexHtml = applyUiBranding(fs.readFileSync(path.join(uiDist, "index.html"), "utf-8"));
+      const indexHtmlPath = path.join(uiDist, "index.html");
       // Hashed asset files (Vite emits them under /assets/<name>.<hash>.<ext>)
       // never change once built, so they can be cached aggressively.
       app.use(
@@ -338,11 +338,14 @@ export async function createApp(
       // with a MIME-type error, and cache that broken response. Return 404
       // instead. The index.html response itself is no-cache so a subsequent
       // deploy's updated asset hashes are picked up on next load.
+      // index.html is read from disk on each request (not cached in memory)
+      // so that in-place package updates are picked up without a server restart.
       app.get(/.*/, (req, res) => {
         if (req.path.startsWith("/assets/")) {
           res.status(404).end();
           return;
         }
+        const indexHtml = applyUiBranding(fs.readFileSync(indexHtmlPath, "utf-8"));
         res
           .status(200)
           .set("Content-Type", "text/html")
