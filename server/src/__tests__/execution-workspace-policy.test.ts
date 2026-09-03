@@ -247,14 +247,25 @@ describe("execution workspace policy helpers", () => {
     ).toBe("project_primary");
   });
 
-  it("falls back to project policy before legacy project-workspace compatibility flag", () => {
+  it("treats the legacy project-workspace flag as an explicit per-issue override above project policy", () => {
+    // The regression this prevents: turning `enableIsolatedWorkspaces` on must not
+    // demote an issue that already carries `useProjectWorkspace: false`, which is the
+    // only expressible form of isolation while the flag is off.
     expect(
       resolveExecutionWorkspaceMode({
         projectPolicy: { enabled: true, defaultMode: "isolated_workspace" },
         issueSettings: null,
         legacyUseProjectWorkspace: false,
       }),
-    ).toBe("isolated_workspace");
+    ).toBe("agent_default");
+    // `inherit` / `reuse_existing` are not preferences, so the legacy flag still speaks.
+    expect(
+      resolveExecutionWorkspaceMode({
+        projectPolicy: { enabled: true, defaultMode: "isolated_workspace" },
+        issueSettings: { mode: "inherit" },
+        legacyUseProjectWorkspace: false,
+      }),
+    ).toBe("agent_default");
     expect(
       resolveExecutionWorkspaceMode({
         projectPolicy: null,
@@ -262,6 +273,56 @@ describe("execution workspace policy helpers", () => {
         legacyUseProjectWorkspace: false,
       }),
     ).toBe("agent_default");
+  });
+
+  it("keeps project policy authority over issues that express no workspace preference", () => {
+    for (const legacyUseProjectWorkspace of [true, null]) {
+      expect(
+        resolveExecutionWorkspaceMode({
+          projectPolicy: { enabled: true, defaultMode: "isolated_workspace" },
+          issueSettings: null,
+          legacyUseProjectWorkspace,
+        }),
+      ).toBe("isolated_workspace");
+      expect(
+        resolveExecutionWorkspaceMode({
+          projectPolicy: { enabled: true, defaultMode: "operator_branch" },
+          issueSettings: null,
+          legacyUseProjectWorkspace,
+        }),
+      ).toBe("operator_branch");
+      expect(
+        resolveExecutionWorkspaceMode({
+          projectPolicy: { enabled: true, defaultMode: "adapter_default" },
+          issueSettings: null,
+          legacyUseProjectWorkspace,
+        }),
+      ).toBe("agent_default");
+      expect(
+        resolveExecutionWorkspaceMode({
+          projectPolicy: { enabled: true, defaultMode: "shared_workspace" },
+          issueSettings: null,
+          legacyUseProjectWorkspace,
+        }),
+      ).toBe("shared_workspace");
+    }
+  });
+
+  it("keeps an explicit issue mode above both project policy and the legacy flag", () => {
+    expect(
+      resolveExecutionWorkspaceMode({
+        projectPolicy: { enabled: true, defaultMode: "adapter_default" },
+        issueSettings: { mode: "isolated_workspace" },
+        legacyUseProjectWorkspace: false,
+      }),
+    ).toBe("isolated_workspace");
+    expect(
+      resolveExecutionWorkspaceMode({
+        projectPolicy: { enabled: true, defaultMode: "isolated_workspace" },
+        issueSettings: { mode: "shared_workspace" },
+        legacyUseProjectWorkspace: false,
+      }),
+    ).toBe("shared_workspace");
   });
 
   it("applies project policy strategy and runtime defaults when isolation is enabled", () => {
@@ -296,6 +357,39 @@ describe("execution workspace policy helpers", () => {
     expect(result.workspaceRuntime).toEqual({
       services: [{ name: "web", command: "pnpm dev" }],
     });
+  });
+
+  it("clears managed workspace strategy when the legacy flag normalizes over an isolating policy", () => {
+    // Consistency check for the resolver's legacy normalization: `hasWorkspaceControl`
+    // already counts `legacyUseProjectWorkspace === false`, so the now-reachable
+    // (policy enabled, mode agent_default) pair must still strip managed workspace
+    // config rather than leave the policy's strategy pinned.
+    const projectPolicy = {
+      enabled: true,
+      defaultMode: "isolated_workspace",
+      workspaceStrategy: { type: "git_worktree", baseRef: "origin/main" },
+      workspaceRuntime: { services: [{ name: "web", command: "pnpm dev" }] },
+    } as const;
+    const input = {
+      agentConfig: {
+        workspaceStrategy: { type: "git_worktree", baseRef: "origin/main" },
+        workspaceRuntime: { services: [{ name: "web", command: "pnpm dev" }] },
+      },
+      projectPolicy,
+      issueSettings: null,
+      legacyUseProjectWorkspace: false,
+    };
+
+    const resolvedMode = resolveExecutionWorkspaceMode({
+      projectPolicy,
+      issueSettings: null,
+      legacyUseProjectWorkspace: false,
+    });
+    expect(resolvedMode).toBe("agent_default");
+
+    const result = buildExecutionWorkspaceAdapterConfig({ ...input, mode: resolvedMode });
+    expect(result.workspaceStrategy).toBeUndefined();
+    expect(result.workspaceRuntime).toBeUndefined();
   });
 
   it("preserves project authorization policy for trust-preset resolution", () => {

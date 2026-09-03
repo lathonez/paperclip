@@ -327,23 +327,47 @@ export function issueExecutionWorkspaceModeForPersistedWorkspace(
   return "shared_workspace";
 }
 
+/**
+ * Resolves the mode an issue explicitly asks for, or `null` when it expresses no
+ * preference and should inherit from project policy.
+ *
+ * The legacy `useProjectWorkspace: false` boolean is the pre-policy spelling of
+ * `mode: "agent_default"`, so it is normalized here rather than checked below the
+ * project-policy branch. Both spellings of "this issue opts out of the shared
+ * workspace" therefore carry the same precedence. This matters because
+ * `issuesSvc.create` strips `executionWorkspaceSettings` while
+ * `enableIsolatedWorkspaces` is off, which makes the legacy boolean the only
+ * expressible form of isolation in that window; keeping it below policy would
+ * demote every existing override the moment the flag is turned on.
+ */
+function resolveExplicitIssueExecutionWorkspaceMode(input: {
+  issueSettings: IssueExecutionWorkspaceSettings | null;
+  legacyUseProjectWorkspace: boolean | null;
+}): ParsedExecutionWorkspaceMode | null {
+  const issueMode = input.issueSettings?.mode;
+  if (issueMode && issueMode !== "inherit" && issueMode !== "reuse_existing") {
+    return issueMode;
+  }
+  if (input.legacyUseProjectWorkspace === false) {
+    return "agent_default";
+  }
+  return null;
+}
+
 export function resolveExecutionWorkspaceMode(input: {
   projectPolicy: ProjectExecutionWorkspacePolicy | null;
   issueSettings: IssueExecutionWorkspaceSettings | null;
   legacyUseProjectWorkspace: boolean | null;
 }): ParsedExecutionWorkspaceMode {
-  const issueMode = input.issueSettings?.mode;
-  if (issueMode && issueMode !== "inherit" && issueMode !== "reuse_existing") {
-    return issueMode;
+  const explicitIssueMode = resolveExplicitIssueExecutionWorkspaceMode(input);
+  if (explicitIssueMode) {
+    return explicitIssueMode;
   }
   if (input.projectPolicy?.enabled) {
     if (input.projectPolicy.defaultMode === "isolated_workspace") return "isolated_workspace";
     if (input.projectPolicy.defaultMode === "operator_branch") return "operator_branch";
     if (input.projectPolicy.defaultMode === "adapter_default") return "agent_default";
     return "shared_workspace";
-  }
-  if (input.legacyUseProjectWorkspace === false) {
-    return "agent_default";
   }
   return "shared_workspace";
 }
