@@ -1653,6 +1653,13 @@
       "when": 1788296836732,
       "tag": "0237_clammy_colonel_america",
       "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "7",
+      "when": 1788466611767,
+      "tag": "0238_project_default_assignee_adapter_overrides",
+      "breakpoints": true
     }
   ]
 }

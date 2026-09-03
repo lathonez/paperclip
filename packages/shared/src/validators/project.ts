@@ -3,6 +3,7 @@ import { PROJECT_STATUSES, PROJECT_ICON_NAMES } from "../constants.js";
 import { envConfigSchema } from "./secret.js";
 import { trustAuthorizationPolicySchema } from "./trust-policy.js";
 import { objectWithoutDefaults } from "./partial.js";
+import { issueAssigneeAdapterOverridesSchema } from "./issue.js";
 
 const executionWorkspaceStrategySchema = z
   .object({
@@ -113,6 +114,10 @@ const projectFields = {
   icon: z.enum(PROJECT_ICON_NAMES).optional().nullable(),
   env: envConfigSchema.optional().nullable(),
   executionWorkspacePolicy: projectExecutionWorkspacePolicySchema.optional().nullable(),
+  // Reuses the per-issue override shape verbatim: this column only ever holds a
+  // default for `issues.assigneeAdapterOverrides`, so a second shape here would
+  // let a project persist a default the issue column cannot accept.
+  defaultAssigneeAdapterOverrides: issueAssigneeAdapterOverridesSchema.optional().nullable(),
   archivedAt: z.string().datetime().optional().nullable(),
 };
 

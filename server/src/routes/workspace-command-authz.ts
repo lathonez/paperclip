@@ -85,6 +85,21 @@ export function collectAgentAdapterWorkspaceCommandPaths(
   );
 }
 
+/**
+ * The project-level default for `issues.assigneeAdapterOverrides` reaches the
+ * same host-executed workspace commands as the per-issue field, so it needs the
+ * same agent-key fence as `collectIssueWorkspaceCommandPaths`. Without this an
+ * agent key could set the commands once on the project and have every issue
+ * created in it inherit them.
+ */
+export function collectProjectDefaultAssigneeAdapterOverridesCommandPaths(raw: unknown): string[] {
+  if (!isRecord(raw)) return [];
+  return collectAgentAdapterWorkspaceCommandPaths(
+    raw.adapterConfig,
+    "defaultAssigneeAdapterOverrides.adapterConfig",
+  );
+}
+
 export function collectProjectExecutionWorkspaceCommandPaths(policy: unknown): string[] {
   if (!isRecord(policy)) return [];
   return [

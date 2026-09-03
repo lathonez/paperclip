@@ -630,6 +630,7 @@ function createProject(overrides: Partial<Project> = {}): Project {
     env: null,
     pauseReason: null,
     pausedAt: null,
+    defaultAssigneeAdapterOverrides: null,
     executionWorkspacePolicy: {
       enabled: true,
       defaultMode: "isolated_workspace",

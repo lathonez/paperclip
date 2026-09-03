@@ -21,6 +21,13 @@ export const projects = pgTable(
     pauseReason: text("pause_reason"),
     pausedAt: timestamp("paused_at", { withTimezone: true }),
     executionWorkspacePolicy: jsonb("execution_workspace_policy").$type<Record<string, unknown>>(),
+    // Project-level default for the per-issue `issues.assignee_adapter_overrides`
+    // column, applied by issue create when the caller supplies none. Deliberately
+    // a top-level column rather than a field inside `execution_workspace_policy`:
+    // that object is gated behind `enableIsolatedWorkspaces` and parses to null
+    // while the flag is off, which would leave the default inert in exactly the
+    // window it is needed. This mirrors the ungated status of the issue column.
+    defaultAssigneeAdapterOverrides: jsonb("default_assignee_adapter_overrides").$type<Record<string, unknown>>(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

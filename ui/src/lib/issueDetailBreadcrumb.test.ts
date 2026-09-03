@@ -89,6 +89,7 @@ describe("issueDetailBreadcrumb", () => {
         pauseReason: null,
         pausedAt: null,
         executionWorkspacePolicy: null,
+        defaultAssigneeAdapterOverrides: null,
         codebase: {
           workspaceId: null,
           repoUrl: null,

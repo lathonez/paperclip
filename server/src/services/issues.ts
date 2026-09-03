@@ -7324,22 +7324,43 @@ export function issueService(db: Db) {
           issueData.projectId = workspace.projectId;
         }
         const projectGoalId = await getProjectDefaultGoalId(tx, companyId, issueData.projectId);
-        // Cache the project policy lookup for this insert so the default
-        // workspace-settings block does not re-query the project row.
-        let projectPolicyCached: ReturnType<typeof parseProjectExecutionWorkspacePolicy> | null = null;
-        let projectPolicyLoaded = false;
-        const loadProjectPolicyOnce = async () => {
-          if (projectPolicyLoaded) return projectPolicyCached;
-          projectPolicyLoaded = true;
+        // Cache the project defaults lookup for this insert so the default
+        // workspace-settings block and the assignee-adapter-overrides default
+        // below share a single read of the project row.
+        let projectDefaultsCached: {
+          executionWorkspacePolicy: Record<string, unknown> | null;
+          defaultAssigneeAdapterOverrides: Record<string, unknown> | null;
+        } | null = null;
+        let projectDefaultsLoaded = false;
+        const loadProjectDefaultsOnce = async () => {
+          if (projectDefaultsLoaded) return projectDefaultsCached;
+          projectDefaultsLoaded = true;
           if (!issueData.projectId) return null;
-          const projectRow = await tx
-            .select({ executionWorkspacePolicy: projects.executionWorkspacePolicy })
+          projectDefaultsCached = await tx
+            .select({
+              executionWorkspacePolicy: projects.executionWorkspacePolicy,
+              defaultAssigneeAdapterOverrides: projects.defaultAssigneeAdapterOverrides,
+            })
             .from(projects)
             .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
             .then((rows) => rows[0] ?? null);
-          projectPolicyCached = parseProjectExecutionWorkspacePolicy(projectRow?.executionWorkspacePolicy);
-          return projectPolicyCached;
+          return projectDefaultsCached;
         };
+        const loadProjectPolicyOnce = async () =>
+          parseProjectExecutionWorkspacePolicy((await loadProjectDefaultsOnce())?.executionWorkspacePolicy);
+
+        // Project-level default for the per-issue adapter overrides (ELL-2238).
+        // Create-only by design: the workspace resolver prefers the previous
+        // session's cwd, so applying this on update would advertise an isolation
+        // guarantee an already-run issue does not have. A caller-supplied value
+        // always wins; `null` and omitted are equivalent at create time, since
+        // there is no prior value for an explicit null to be clearing.
+        if (issueData.projectId && issueData.assigneeAdapterOverrides == null) {
+          const projectDefault = (await loadProjectDefaultsOnce())?.defaultAssigneeAdapterOverrides ?? null;
+          if (projectDefault && Object.keys(projectDefault).length > 0) {
+            issueData.assigneeAdapterOverrides = projectDefault;
+          }
+        }
 
         if (
           executionWorkspaceSettings == null &&

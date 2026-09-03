@@ -171,6 +171,7 @@ function project(overrides: Partial<Project> = {}): Project {
     pauseReason: null,
     pausedAt: null,
     executionWorkspacePolicy: null,
+    defaultAssigneeAdapterOverrides: null,
     codebase: {
       workspaceId: null,
       repoUrl: null,

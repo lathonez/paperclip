@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "default_assignee_adapter_overrides" jsonb;

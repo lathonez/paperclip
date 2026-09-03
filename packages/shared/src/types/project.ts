@@ -5,6 +5,7 @@ import type {
   WorkspaceRuntimeService,
 } from "./workspace-runtime.js";
 import type { AgentEnvConfig } from "./secrets.js";
+import type { IssueAssigneeAdapterOverrides } from "./issue.js";
 
 export type ProjectWorkspaceSourceType = "local_path" | "git_repo" | "remote_managed" | "non_git_path";
 export type ProjectWorkspaceVisibility = "default" | "advanced";
@@ -94,6 +95,15 @@ export interface Project {
   pauseReason: PauseReason | null;
   pausedAt: Date | null;
   executionWorkspacePolicy: ProjectExecutionWorkspacePolicy | null;
+  /**
+   * Default applied to `issues.assigneeAdapterOverrides` by issue create when
+   * the caller supplies none. Caller-supplied overrides always win — this is a
+   * default, not an enforcement — and it is applied at create only, never on
+   * update. Not part of `executionWorkspacePolicy` on purpose: that object is
+   * gated behind the `enableIsolatedWorkspaces` instance flag, which would make
+   * a default sourced from it inert while the flag is off.
+   */
+  defaultAssigneeAdapterOverrides: IssueAssigneeAdapterOverrides | null;
   codebase: ProjectCodebase;
   workspaces: ProjectWorkspace[];
   primaryWorkspace: ProjectWorkspace | null;

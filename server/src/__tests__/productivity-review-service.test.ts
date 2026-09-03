@@ -9,6 +9,7 @@ import {
   heartbeatRuns,
   issueComments,
   issues,
+  projects,
 } from "@paperclipai/db";
 import {
   getEmbeddedPostgresTestSupport,
@@ -55,6 +56,13 @@ describeEmbeddedPostgres("productivity review service", () => {
     startedAt?: Date;
     parentId?: string | null;
     originKind?: string;
+    /**
+     * When set, the source issue is filed in a project carrying this value as
+     * its `defaultAssigneeAdapterOverrides`. Spawned reviews inherit `projectId`
+     * and pass no overrides of their own, so this is the input that exercises
+     * the project-level default through the auto-spawn path.
+     */
+    projectDefaultAssigneeAdapterOverrides?: Record<string, unknown> | null;
   }) {
     const companyId = randomUUID();
     const managerId = randomUUID();
@@ -94,6 +102,16 @@ describeEmbeddedPostgres("productivity review service", () => {
         permissions: {},
       },
     ]);
+    let projectId: string | null = null;
+    if (opts?.projectDefaultAssigneeAdapterOverrides !== undefined) {
+      projectId = randomUUID();
+      await db.insert(projects).values({
+        id: projectId,
+        companyId,
+        name: "Blind verification",
+        defaultAssigneeAdapterOverrides: opts.projectDefaultAssigneeAdapterOverrides,
+      });
+    }
     await db.insert(issues).values({
       id: issueId,
       companyId,
@@ -102,6 +120,7 @@ describeEmbeddedPostgres("productivity review service", () => {
       priority: "medium",
       assigneeAgentId: coderId,
       parentId: opts?.parentId ?? null,
+      projectId,
       originKind: opts?.originKind ?? "manual",
       issueNumber: 1,
       identifier: `${issuePrefix}-1`,
@@ -110,7 +129,7 @@ describeEmbeddedPostgres("productivity review service", () => {
       updatedAt: createdAt,
     });
 
-    return { companyId, managerId, coderId, issueId, issuePrefix, createdAt };
+    return { companyId, managerId, coderId, issueId, issuePrefix, createdAt, projectId };
   }
 
   async function insertRuns(input: {
@@ -208,6 +227,57 @@ describeEmbeddedPostgres("productivity review service", () => {
     expect(reviews[0]?.description).toContain("No-comment completed-run streak: 10");
 
     expect(await listRefreshComments(reviews[0]!.id)).toHaveLength(0);
+  });
+
+  it("applies the source project's default assignee adapter overrides to the spawned review", async () => {
+    // The spawn site passes `projectId` and no `assigneeAdapterOverrides`, which
+    // is what used to land the review's transcript in the shared per-project
+    // slug. The project default now closes that path without the call site
+    // knowing about isolation at all.
+    const now = new Date("2026-04-28T12:00:00.000Z");
+    const seeded = await seedAssignedIssue({
+      projectDefaultAssigneeAdapterOverrides: { useProjectWorkspace: false },
+    });
+    await insertRuns({
+      companyId: seeded.companyId,
+      agentId: seeded.coderId,
+      issueId: seeded.issueId,
+      count: DEFAULT_PRODUCTIVITY_REVIEW_NO_COMMENT_STREAK_RUNS,
+      now,
+    });
+
+    const result = await productivityReviewService(db).reconcileProductivityReviews({
+      now,
+      companyId: seeded.companyId,
+    });
+
+    expect(result.created).toBe(1);
+    const reviews = await listProductivityReviews(seeded.companyId);
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]?.projectId).toBe(seeded.projectId);
+    expect(reviews[0]?.assigneeAdapterOverrides).toEqual({ useProjectWorkspace: false });
+  });
+
+  it("leaves the spawned review's adapter overrides null when the source project sets no default", async () => {
+    const now = new Date("2026-04-28T12:00:00.000Z");
+    const seeded = await seedAssignedIssue({ projectDefaultAssigneeAdapterOverrides: null });
+    await insertRuns({
+      companyId: seeded.companyId,
+      agentId: seeded.coderId,
+      issueId: seeded.issueId,
+      count: DEFAULT_PRODUCTIVITY_REVIEW_NO_COMMENT_STREAK_RUNS,
+      now,
+    });
+
+    const result = await productivityReviewService(db).reconcileProductivityReviews({
+      now,
+      companyId: seeded.companyId,
+    });
+
+    expect(result.created).toBe(1);
+    const reviews = await listProductivityReviews(seeded.companyId);
+    expect(reviews[0]?.projectId).toBe(seeded.projectId);
+    expect(reviews[0]?.assigneeAdapterOverrides).toBeNull();
   });
 
   it("refreshes open productivity reviews only once per interval and caps refresh comments", async () => {

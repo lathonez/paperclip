@@ -306,6 +306,7 @@ const storybookProject: Project = {
   env: null,
   pauseReason: null,
   pausedAt: null,
+  defaultAssigneeAdapterOverrides: null,
   executionWorkspacePolicy: null,
   codebase: {
     workspaceId: "workspace-board-ui",

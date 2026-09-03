@@ -27,6 +27,7 @@ import {
 } from "../services/workspace-runtime.js";
 import {
   assertNoAgentHostWorkspaceCommandMutation,
+  collectProjectDefaultAssigneeAdapterOverridesCommandPaths,
   collectProjectExecutionWorkspaceCommandPaths,
   collectProjectWorkspaceCommandPaths,
 } from "./workspace-command-authz.js";
@@ -202,6 +203,9 @@ export function projectRoutes(db: Db) {
       req,
       [
         ...collectProjectExecutionWorkspaceCommandPaths(projectData.executionWorkspacePolicy),
+        ...collectProjectDefaultAssigneeAdapterOverridesCommandPaths(
+          projectData.defaultAssigneeAdapterOverrides,
+        ),
         ...collectProjectWorkspaceCommandPaths(workspace, "workspace"),
       ],
     );
@@ -262,7 +266,12 @@ export function projectRoutes(db: Db) {
     const body = { ...req.body };
     assertNoAgentHostWorkspaceCommandMutation(
       req,
-      collectProjectExecutionWorkspaceCommandPaths(body.executionWorkspacePolicy),
+      [
+        ...collectProjectExecutionWorkspaceCommandPaths(body.executionWorkspacePolicy),
+        ...collectProjectDefaultAssigneeAdapterOverridesCommandPaths(
+          body.defaultAssigneeAdapterOverrides,
+        ),
+      ],
     );
     await assertProjectEnvironmentSelection(
       existing.companyId,

@@ -74,9 +74,17 @@ describeEmbeddedPostgres("summary slot service", () => {
     return companyId;
   }
 
-  async function seedProject(companyId: string) {
+  async function seedProject(
+    companyId: string,
+    opts?: { defaultAssigneeAdapterOverrides?: Record<string, unknown> | null },
+  ) {
     const projectId = randomUUID();
-    await db.insert(projects).values({ id: projectId, companyId, name: "Paperclip App" });
+    await db.insert(projects).values({
+      id: projectId,
+      companyId,
+      name: "Paperclip App",
+      defaultAssigneeAdapterOverrides: opts?.defaultAssigneeAdapterOverrides ?? null,
+    });
     return projectId;
   }
 
@@ -318,6 +326,70 @@ describeEmbeddedPostgres("summary slot service", () => {
       expect(issueRow.description).toContain(`/${issuePrefix(companyId)}/issues/`);
       expect(issueRow.description).not.toContain("/PAP/issues/");
       expect(issueRow.description).not.toContain("Other project issue");
+    });
+
+    it("applies the target project's default assignee adapter overrides to the generation task", async () => {
+      // This path has no source issue to inherit from — the project comes from
+      // the slot's own scope — so a project-level default is the only thing that
+      // can reach it. The generation task is also description-patched via
+      // `issuesSvc.update` straight after create, which must not disturb the
+      // value applied at create.
+      const companyId = await seedCompany();
+      const projectId = await seedProject(companyId, {
+        defaultAssigneeAdapterOverrides: { useProjectWorkspace: false },
+      });
+      await seedSummarizer(companyId);
+      const svc = summarySlotService(db);
+
+      const result = await svc.generate(projectSelector(companyId, projectId), { userId: "board-user" });
+
+      const issueRow = await db
+        .select()
+        .from(issues)
+        .where(eq(issues.id, result.generatingIssue.id))
+        .then((rows) => rows[0]!);
+      expect(issueRow.projectId).toBe(projectId);
+      expect(issueRow.assigneeAdapterOverrides).toEqual({ useProjectWorkspace: false });
+    });
+
+    it("applies the project default to an execution-workspace-scoped generation task", async () => {
+      const companyId = await seedCompany();
+      const projectId = await seedProject(companyId, {
+        defaultAssigneeAdapterOverrides: { useProjectWorkspace: false },
+      });
+      const projectWorkspaceId = await seedProjectWorkspace(companyId, projectId);
+      const executionWorkspaceId = await seedExecutionWorkspace(companyId, projectId, projectWorkspaceId);
+      await seedSummarizer(companyId);
+      const svc = summarySlotService(db);
+
+      const result = await svc.generate(
+        executionWorkspaceSelector(companyId, executionWorkspaceId),
+        { userId: "board-user" },
+      );
+
+      const issueRow = await db
+        .select()
+        .from(issues)
+        .where(eq(issues.id, result.generatingIssue.id))
+        .then((rows) => rows[0]!);
+      expect(issueRow.projectId).toBe(projectId);
+      expect(issueRow.assigneeAdapterOverrides).toEqual({ useProjectWorkspace: false });
+    });
+
+    it("leaves the generation task's adapter overrides null when the project sets no default", async () => {
+      const companyId = await seedCompany();
+      const projectId = await seedProject(companyId);
+      await seedSummarizer(companyId);
+      const svc = summarySlotService(db);
+
+      const result = await svc.generate(projectSelector(companyId, projectId), { userId: "board-user" });
+
+      const issueRow = await db
+        .select()
+        .from(issues)
+        .where(eq(issues.id, result.generatingIssue.id))
+        .then((rows) => rows[0]!);
+      expect(issueRow.assigneeAdapterOverrides).toBeNull();
     });
 
     it("keeps summaries and snapshots isolated between execution workspaces", async () => {
