@@ -48,7 +48,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     codebase: { workspaceId: null, repoUrl: null, repoRef: null, defaultRef: null, repoName: null },
     primaryWorkspace: null,
     workspaces: [],
-    executionWorkspacePolicy: { enabled: true, defaultMode: "shared_workspace", allowIssueOverride: true },
+    executionWorkspacePolicy: { enabled: true, defaultMode: "shared_workspace" },
     ...overrides,
   } as unknown as Project;
 }

@@ -16,12 +16,17 @@ const executionWorkspaceStrategySchema = z
   })
   .strict();
 
-export const projectExecutionWorkspacePolicySchema = z
+// Keys this policy no longer carries. Persisted `execution_workspace_policy`
+// jsonb still holds them and older API callers still send them, so they are
+// dropped on input rather than rejected: a stored value must not turn into a
+// hard validation error. The strict object below still rejects typos.
+const REMOVED_PROJECT_EXECUTION_WORKSPACE_POLICY_KEYS = ["allowIssueOverride"];
+
+const projectExecutionWorkspacePolicyFieldsSchema = z
   .object({
     enabled: z.boolean(),
     sharedWorkspaceConcurrency: z.enum(["auto", "serialize", "allow"]).optional(),
     defaultMode: z.enum(["shared_workspace", "isolated_workspace", "operator_branch", "adapter_default"]).optional(),
-    allowIssueOverride: z.boolean().optional(),
     defaultProjectWorkspaceId: z.string().guid().optional().nullable(),
     environmentId: z.string().guid().optional().nullable(),
     workspaceStrategy: executionWorkspaceStrategySchema.optional().nullable(),
@@ -33,6 +38,13 @@ export const projectExecutionWorkspacePolicySchema = z
     authorizationPolicy: trustAuthorizationPolicySchema.optional().nullable(),
   })
   .strict();
+
+export const projectExecutionWorkspacePolicySchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const next = { ...(value as Record<string, unknown>) };
+  for (const key of REMOVED_PROJECT_EXECUTION_WORKSPACE_POLICY_KEYS) delete next[key];
+  return next;
+}, projectExecutionWorkspacePolicyFieldsSchema);
 
 export const projectWorkspaceRuntimeConfigSchema = z.object({
   workspaceRuntime: z.record(z.string(), z.unknown()).optional().nullable(),

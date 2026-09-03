@@ -419,7 +419,6 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
       executionWorkspacePolicy: {
         enabled: executionWorkspacesEnabled,
         defaultMode: executionWorkspaceDefaultMode,
-        allowIssueOverride: executionWorkspacePolicy?.allowIssueOverride ?? true,
         ...executionWorkspacePolicy,
         ...patch,
       },

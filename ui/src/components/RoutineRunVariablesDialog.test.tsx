@@ -90,7 +90,6 @@ function createProject(): Project {
     executionWorkspacePolicy: {
       enabled: true,
       defaultMode: "shared_workspace",
-      allowIssueOverride: true,
     },
     codebase: {
       workspaceId: null,

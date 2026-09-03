@@ -633,7 +633,6 @@ function createProject(overrides: Partial<Project> = {}): Project {
     executionWorkspacePolicy: {
       enabled: true,
       defaultMode: "isolated_workspace",
-      allowIssueOverride: true,
       defaultProjectWorkspaceId: "workspace-board-ui",
       workspaceStrategy: {
         type: "git_worktree",
@@ -721,7 +720,6 @@ export const storybookProjects: Project[] = [
     executionWorkspacePolicy: {
       enabled: false,
       defaultMode: "shared_workspace",
-      allowIssueOverride: false,
       defaultProjectWorkspaceId: null,
       workspaceStrategy: null,
       workspaceRuntime: null,

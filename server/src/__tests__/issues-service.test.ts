@@ -3133,7 +3133,6 @@ describeEmbeddedPostgres("issueService.create workspace inheritance", () => {
       executionWorkspacePolicy: {
         enabled: true,
         defaultMode: "shared_workspace",
-        allowIssueOverride: true,
         defaultProjectWorkspaceId: projectWorkspaceId,
       },
     });
@@ -3215,7 +3214,6 @@ describeEmbeddedPostgres("issueService.create workspace inheritance", () => {
       executionWorkspacePolicy: {
         enabled: true,
         defaultMode: "shared_workspace",
-        allowIssueOverride: true,
         defaultProjectWorkspaceId: projectWorkspaceId,
         environmentId: projectEnvironmentId,
       },
@@ -3311,7 +3309,6 @@ describeEmbeddedPostgres("issueService.create workspace inheritance", () => {
       executionWorkspacePolicy: {
         enabled: true,
         defaultMode: "shared_workspace",
-        allowIssueOverride: true,
         defaultProjectWorkspaceId: projectWorkspaceId,
       },
     });
@@ -3388,7 +3385,6 @@ describeEmbeddedPostgres("issueService.create workspace inheritance", () => {
       executionWorkspacePolicy: {
         enabled: true,
         defaultMode: "shared_workspace",
-        allowIssueOverride: true,
         defaultProjectWorkspaceId: projectWorkspaceId,
       },
     });

@@ -82,6 +82,36 @@ describe("execution workspace policy helpers", () => {
     }).success).toBe(false);
   });
 
+  it("ignores a stored allowIssueOverride key instead of failing on it", () => {
+    // The field was removed as dead code. Persisted `execution_workspace_policy`
+    // jsonb still carries it and there is no backfill, so neither the read path
+    // nor the patch validator may fail on a row that has it.
+    const stored = {
+      enabled: true,
+      defaultMode: "shared_workspace",
+      allowIssueOverride: false,
+      defaultProjectWorkspaceId: "22222222-2222-4222-8222-222222222222",
+    };
+
+    expect(parseProjectExecutionWorkspacePolicy(stored)).toEqual({
+      enabled: true,
+      defaultMode: "shared_workspace",
+      defaultProjectWorkspaceId: "22222222-2222-4222-8222-222222222222",
+    });
+
+    // Stripped on input rather than rejected: a stored value must not turn into
+    // a hard validation error when the row is patched back.
+    const validated = projectExecutionWorkspacePolicySchema.parse(stored);
+    expect(validated).not.toHaveProperty("allowIssueOverride");
+    expect(validated.defaultMode).toBe("shared_workspace");
+
+    // Stripping the removed key does not soften the object: a typo still fails.
+    expect(projectExecutionWorkspacePolicySchema.safeParse({
+      enabled: true,
+      allowIssueOverrides: true,
+    }).success).toBe(false);
+  });
+
   it("accepts an existing-branch pin only with isolated mode and a git_worktree strategy", () => {
     expect(issueExecutionWorkspaceSettingsSchema.parse({
       mode: "isolated_workspace",

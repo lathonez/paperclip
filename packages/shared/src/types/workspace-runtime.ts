@@ -168,7 +168,6 @@ export interface ProjectExecutionWorkspacePolicy {
   enabled: boolean;
   sharedWorkspaceConcurrency?: SharedWorkspaceConcurrency;
   defaultMode?: ProjectExecutionWorkspaceDefaultMode;
-  allowIssueOverride?: boolean;
   defaultProjectWorkspaceId?: string | null;
   environmentId?: string | null;
   workspaceStrategy?: ExecutionWorkspaceStrategy | null;

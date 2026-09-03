@@ -64,7 +64,7 @@ function makeProject(codebase: ProjectCodebase): Project {
     codebase,
     primaryWorkspace: null,
     workspaces: [],
-    executionWorkspacePolicy: { enabled: true, defaultMode: "shared_workspace", allowIssueOverride: true },
+    executionWorkspacePolicy: { enabled: true, defaultMode: "shared_workspace" },
   } as unknown as Project;
 }
 
