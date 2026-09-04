@@ -1115,6 +1115,56 @@ describe("preflightLowTrustWorkspaceIsolation", () => {
       resolveSelectedEnvironmentDriver: async () => "sandbox",
     })).resolves.toBe("sandbox");
   });
+
+  // ELL-2278. The low_trust_review guard at heartbeat.ts:17852 only upgrades a resolved
+  // `shared_workspace` to `isolated_workspace`, so a mode that resolves `agent_default`
+  // (legacy `useProjectWorkspace: false`, or policy `defaultMode: adapter_default`) reaches
+  // this preflight unchanged. These cases pin what happens then — the run is refused, rather
+  // than falling through to a per-agent workspace reused across runs.
+  it("refuses a low-trust run whose mode resolved agent_default instead of isolated_workspace", async () => {
+    await expect(preflightLowTrustWorkspaceIsolation({
+      trustPreset: lowTrustResolution(),
+      isolatedWorkspacesEnabled: true,
+      effectiveExecutionWorkspaceMode: "agent_default",
+      issue: {
+        companyId: "company-1",
+        id: "issue-1",
+        projectId: "project-1",
+      },
+      resolveSelectedEnvironmentDriver: async () => "sandbox",
+    })).rejects.toMatchObject({
+      status: 422,
+      details: expect.objectContaining({
+        code: "low_trust_requires_isolated_workspace",
+      }),
+    });
+  });
+
+  // The flag check precedes the mode check, so while `enableIsolatedWorkspaces` is off
+  // (the production default) every low-trust run is refused with the same code no matter
+  // which mode it resolved. Widening the guard is therefore unobservable with the flag off.
+  it.each([
+    ["agent_default"],
+    ["shared_workspace"],
+    ["isolated_workspace"],
+  ])("refuses a low-trust run with isolated workspaces disabled, regardless of mode (%s)", async (mode) => {
+    await expect(preflightLowTrustWorkspaceIsolation({
+      trustPreset: lowTrustResolution(),
+      isolatedWorkspacesEnabled: false,
+      effectiveExecutionWorkspaceMode: mode,
+      issue: {
+        companyId: "company-1",
+        id: "issue-1",
+        projectId: "project-1",
+      },
+      resolveSelectedEnvironmentDriver: async () => "sandbox",
+    })).rejects.toMatchObject({
+      status: 422,
+      details: expect.objectContaining({
+        code: "low_trust_isolation_unavailable",
+      }),
+    });
+  });
 });
 
 describe("resolveWorkspaceAfterLowTrustPreflight", () => {
@@ -1139,6 +1189,38 @@ describe("resolveWorkspaceAfterLowTrustPreflight", () => {
       status: 422,
       details: expect.objectContaining({
         code: "low_trust_requires_sandbox_environment",
+      }),
+    });
+
+    expect(workspaceResolverReached).toBe(false);
+  });
+
+  // ELL-2278. The load-bearing fact for the guard question: when a low-trust review's mode
+  // resolves `agent_default`, the reviewer does not get a per-agent workspace reused across
+  // runs — `resolveWorkspace` is never called at all. The trust boundary is already
+  // fail-closed here, so widening the guard cannot be what stops a leak between blind
+  // verifications; it can only turn this refusal into a successful isolated run.
+  it("never resolves a workspace for a low-trust run whose mode resolved agent_default", async () => {
+    let workspaceResolverReached = false;
+
+    await expect(resolveWorkspaceAfterLowTrustPreflight({
+      trustPreset: lowTrustResolution(),
+      isolatedWorkspacesEnabled: true,
+      effectiveExecutionWorkspaceMode: "agent_default",
+      issue: {
+        companyId: "company-1",
+        id: "issue-1",
+        projectId: "project-1",
+      },
+      resolveSelectedEnvironmentDriver: async () => "sandbox",
+      resolveWorkspace: async () => {
+        workspaceResolverReached = true;
+        return buildResolvedWorkspace();
+      },
+    })).rejects.toMatchObject({
+      status: 422,
+      details: expect.objectContaining({
+        code: "low_trust_requires_isolated_workspace",
       }),
     });
 
