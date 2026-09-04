@@ -300,6 +300,93 @@ describe("ELL-2282: an upstream pin at the upgrade site cannot reach routes 2 an
   });
 });
 
+describe("ELL-2282: which configurations a git_worktree allowlist would admit", () => {
+  // The operator-facing consequence of the allowlist option, measured rather than
+  // described. `admissibility` composes the real resolver, the real low-trust upgrade
+  // condition and the real config builder, then reports the pair the assert would see.
+  // A run is admitted only when the mode is isolated_workspace AND the strategy is
+  // git_worktree, which is exactly the proposed rule.
+  function admissibility(input: {
+    projectPolicy: unknown;
+    issueSettings: unknown;
+    legacyUseProjectWorkspace: boolean | null;
+    agentConfig: Record<string, unknown>;
+  }) {
+    const resolved = resolveExecutionWorkspaceMode(input as never);
+    const requested = resolved === "shared_workspace" ? "isolated_workspace" : resolved;
+    const merged = buildExecutionWorkspaceAdapterConfig({ ...(input as never), mode: requested });
+    const strategy = resolveEffectiveWorkspaceStrategyType(requested, merged);
+    return {
+      requested,
+      strategy,
+      admitted: requested === "isolated_workspace" && strategy === "git_worktree",
+    };
+  }
+
+  const NOTHING = {
+    projectPolicy: null,
+    issueSettings: null,
+    legacyUseProjectWorkspace: null,
+    agentConfig: {},
+  };
+
+  it("refuses only when no workspace control and no agent-level worktree pin exist", () => {
+    // The exposure this issue is about, and the two shapes adjacent to it.
+    expect(admissibility(NOTHING)).toMatchObject({
+      requested: "isolated_workspace",
+      strategy: "project_primary",
+      admitted: false,
+    });
+    expect(
+      admissibility({ ...NOTHING, projectPolicy: { enabled: false, defaultMode: "isolated_workspace" } }),
+    ).toMatchObject({ strategy: "project_primary", admitted: false });
+    expect(
+      admissibility({
+        ...NOTHING,
+        projectPolicy: { enabled: true, defaultMode: "isolated_workspace" },
+        agentConfig: { workspaceStrategy: { type: "project_primary" } },
+      }),
+    ).toMatchObject({ strategy: "project_primary", admitted: false });
+  });
+
+  it("admits an agent-level git_worktree pin even with no project policy", () => {
+    // Not obvious, and it matters for remediation: hasWorkspaceControl is false here so
+    // the builder never runs, but the agent's own pin survives untouched and resolves
+    // git_worktree. So the refusal above has TWO independent one-line fixes — project
+    // policy, or the agent's own adapterConfig.workspaceStrategy.
+    expect(
+      admissibility({ ...NOTHING, agentConfig: { workspaceStrategy: { type: "git_worktree" } } }),
+    ).toMatchObject({ requested: "isolated_workspace", strategy: "git_worktree", admitted: true });
+  });
+
+  it("admits both policy default modes that reach isolated_workspace", () => {
+    for (const defaultMode of ["isolated_workspace", "shared_workspace"]) {
+      expect(admissibility({ ...NOTHING, projectPolicy: { enabled: true, defaultMode } })).toMatchObject({
+        requested: "isolated_workspace",
+        strategy: "git_worktree",
+        admitted: true,
+      });
+    }
+    expect(admissibility({ ...NOTHING, issueSettings: { mode: "isolated_workspace" } })).toMatchObject({
+      strategy: "git_worktree",
+      admitted: true,
+    });
+  });
+
+  it("still refuses the two modes ELL-2278 decided to leave refused", () => {
+    // cc724d38's shape and the legacy override both resolve agent_default, which the
+    // mode check already refuses. The allowlist does not change that, and must not.
+    expect(
+      admissibility({ ...NOTHING, projectPolicy: { enabled: true, defaultMode: "adapter_default" } }),
+    ).toMatchObject({ requested: "agent_default", strategy: "adapter_managed", admitted: false });
+    expect(admissibility({ ...NOTHING, legacyUseProjectWorkspace: false })).toMatchObject({
+      requested: "agent_default",
+      strategy: "adapter_managed",
+      admitted: false,
+    });
+  });
+});
+
 describe("ELL-2282: the existing mode check stays necessary", () => {
   // Whatever is added must be in ADDITION to the mode check, never instead of it.
   // agent_default with an agent-pinned git_worktree would satisfy a strategy-only gate,
