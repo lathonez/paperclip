@@ -62,6 +62,24 @@ export async function assertLowTrustWorkspaceIsolation(input: {
       code: "low_trust_isolation_unavailable",
     });
   }
+  // Deliberately a mode-string equality, not a check on the resolved workspace
+  // strategy. `agent_default` spans strategies `adapter_managed` and `cloud_sandbox`,
+  // and it is tempting to admit the latter as adapter-native isolation. Do not:
+  // `cloud_sandbox` is accepted by the validators and returned by
+  // resolveEffectiveWorkspaceStrategyType, but realizeExecutionWorkspace has no branch
+  // for it. Everything that is not `git_worktree` collapses to `project_primary` at the
+  // unchanged base cwd, so `cloud_sandbox` and `adapter_managed` realize identically
+  // and neither isolates. Admitting a strategy here would put a low-trust reviewer in
+  // the directory this check exists to keep it out of. Whatever confinement a cloud
+  // sandbox actually provides comes from the environment driver, which the
+  // `selectedEnvironmentDriver !== "sandbox"` check below already requires separately.
+  //
+  // Caveat worth knowing before anyone hardens this: passing here is necessary but not
+  // sufficient for isolation. The `git_worktree` default in
+  // buildExecutionWorkspaceAdapterConfig only applies when project policy or issue
+  // settings put workspace control in play, so a low-trust run whose mode was upgraded
+  // from `shared_workspace` with no such configuration satisfies this check and still
+  // realizes as `project_primary`. See low-trust-workspace-strategy-gate.test.ts.
   if (input.effectiveExecutionWorkspaceMode !== "isolated_workspace") {
     throw unprocessable("Low-trust execution requires an isolated execution workspace.", {
       code: "low_trust_requires_isolated_workspace",
