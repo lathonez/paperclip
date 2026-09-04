@@ -1066,6 +1066,7 @@ describe("preflightLowTrustWorkspaceIsolation", () => {
         trustPreset: lowTrustResolution(),
         isolatedWorkspacesEnabled: true,
         effectiveExecutionWorkspaceMode: "isolated_workspace",
+        effectiveExecutionWorkspaceStrategyType: "git_worktree",
         issue: {
           companyId: "company-1",
           id: "issue-1",
@@ -1089,6 +1090,7 @@ describe("preflightLowTrustWorkspaceIsolation", () => {
       trustPreset: lowTrustResolution(),
       isolatedWorkspacesEnabled: true,
       effectiveExecutionWorkspaceMode: "isolated_workspace",
+      effectiveExecutionWorkspaceStrategyType: "git_worktree",
       issue: {
         companyId: "company-1",
         id: "issue-1",
@@ -1107,6 +1109,7 @@ describe("preflightLowTrustWorkspaceIsolation", () => {
       trustPreset: lowTrustResolution(),
       isolatedWorkspacesEnabled: true,
       effectiveExecutionWorkspaceMode: "isolated_workspace",
+      effectiveExecutionWorkspaceStrategyType: "git_worktree",
       issue: {
         companyId: "company-1",
         id: "issue-child",
@@ -1125,6 +1128,7 @@ describe("resolveWorkspaceAfterLowTrustPreflight", () => {
       trustPreset: lowTrustResolution(),
       isolatedWorkspacesEnabled: true,
       effectiveExecutionWorkspaceMode: "isolated_workspace",
+      effectiveExecutionWorkspaceStrategyType: "git_worktree",
       issue: {
         companyId: "company-1",
         id: "issue-1",
@@ -1152,6 +1156,9 @@ describe("resolveWorkspaceAfterLowTrustPreflight", () => {
       trustPreset: standardTrustResolution(),
       isolatedWorkspacesEnabled: false,
       effectiveExecutionWorkspaceMode: "shared_workspace",
+      // Non-isolating on purpose: the strategy gate is low-trust only, so a
+      // standard-trust run must still resolve its workspace untouched.
+      effectiveExecutionWorkspaceStrategyType: "project_primary",
       issue: {
         companyId: "company-1",
         id: "issue-1",

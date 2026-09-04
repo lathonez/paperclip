@@ -10,6 +10,27 @@ import {
 
 export const LOW_TRUST_RUNTIME_MANAGEMENT_TOOL_CLASS = "runtime.manage";
 
+/**
+ * Workspace strategy types that provably isolate a low-trust run from the shared
+ * project checkout.
+ *
+ * This is an allowlist and must stay one: `null`, `undefined` and any strategy type
+ * not named here all refuse. `realizeExecutionWorkspace` dispatches binarily on
+ * `git_worktree` (workspace-runtime.ts:3216-3217, mirrored at :3664 and :8664) — every
+ * other type realizes as `project_primary` and runs in the unchanged base cwd. So
+ * `git_worktree` is exhaustive today. If any other strategy type grows a provisioning
+ * path that leaves the base cwd, add it here; the exhaustiveness assertion in
+ * `low-trust-isolation-strategy-coverage.test.ts` fails loudly when that happens.
+ */
+export const LOW_TRUST_ISOLATING_WORKSPACE_STRATEGY_TYPES: readonly string[] = ["git_worktree"];
+
+export function isLowTrustIsolatingWorkspaceStrategy(
+  strategyType: string | null | undefined,
+): boolean {
+  if (typeof strategyType !== "string") return false;
+  return LOW_TRUST_ISOLATING_WORKSPACE_STRATEGY_TYPES.includes(strategyType);
+}
+
 export function isLowTrustRuntimeManagementAllowed(resolution: TrustPresetResolution) {
   return resolution.kind === "low_trust_review" &&
     (resolution.boundary.allowedToolClasses ?? []).includes(LOW_TRUST_RUNTIME_MANAGEMENT_TOOL_CLASS);
@@ -46,6 +67,14 @@ export async function assertLowTrustWorkspaceIsolation(input: {
   resolution: TrustPresetResolution;
   isolatedWorkspacesEnabled: boolean;
   effectiveExecutionWorkspaceMode: string | null | undefined;
+  /**
+   * The workspace strategy type realization will actually consume, resolved from the
+   * same merged adapter config (`resolveEffectiveWorkspaceStrategyType`). The mode
+   * check above is not sufficient on its own: an explicit project policy or a per-issue
+   * `adapterConfig` override can reach `isolated_workspace` while still pinning a
+   * non-isolating strategy, in which case the run shares the project checkout.
+   */
+  effectiveExecutionWorkspaceStrategyType: string | null | undefined;
   selectedEnvironmentDriver: string | null | undefined;
   issue: { companyId: string; id?: string | null; projectId?: string | null } | null;
 }) {
@@ -83,6 +112,21 @@ export async function assertLowTrustWorkspaceIsolation(input: {
     throw unprocessable("Low-trust execution requires a sandbox environment driver.", {
       code: "low_trust_requires_sandbox_environment",
     });
+  }
+  // Deliberately last. The sandbox driver is the more fundamental precondition, so it
+  // reports first; checking the strategy any earlier changes the code reported for runs
+  // that fail more than one gate and every existing refusal code has to stay as it is.
+  if (!isLowTrustIsolatingWorkspaceStrategy(input.effectiveExecutionWorkspaceStrategyType)) {
+    throw unprocessable(
+      "Low-trust execution requires a workspace strategy that isolates the run from the shared project checkout.",
+      {
+        code: "low_trust_requires_isolating_workspace_strategy",
+        // Carried so an operator can tell "wrong mode" from "mode fine, strategy not
+        // isolating" without reproducing the resolution.
+        workspaceStrategyType: input.effectiveExecutionWorkspaceStrategyType ?? null,
+        allowedWorkspaceStrategyTypes: [...LOW_TRUST_ISOLATING_WORKSPACE_STRATEGY_TYPES],
+      },
+    );
   }
 }
 

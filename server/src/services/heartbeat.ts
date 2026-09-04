@@ -1974,6 +1974,7 @@ export async function preflightLowTrustWorkspaceIsolation(input: {
   trustPreset: TrustPresetResolution;
   isolatedWorkspacesEnabled: boolean;
   effectiveExecutionWorkspaceMode: string | null | undefined;
+  effectiveExecutionWorkspaceStrategyType: string | null | undefined;
   issue: {
     companyId: string;
     id?: string | null;
@@ -1998,6 +1999,8 @@ export async function preflightLowTrustWorkspaceIsolation(input: {
     resolution: input.trustPreset,
     isolatedWorkspacesEnabled: input.isolatedWorkspacesEnabled,
     effectiveExecutionWorkspaceMode: input.effectiveExecutionWorkspaceMode,
+    effectiveExecutionWorkspaceStrategyType:
+      input.effectiveExecutionWorkspaceStrategyType,
     selectedEnvironmentDriver,
     issue: input.issue,
   });
@@ -2012,6 +2015,7 @@ export async function resolveWorkspaceAfterLowTrustPreflight<
   trustPreset: TrustPresetResolution;
   isolatedWorkspacesEnabled: boolean;
   effectiveExecutionWorkspaceMode: string | null | undefined;
+  effectiveExecutionWorkspaceStrategyType: string | null | undefined;
   issue: {
     companyId: string;
     id?: string | null;
@@ -2028,6 +2032,8 @@ export async function resolveWorkspaceAfterLowTrustPreflight<
     trustPreset: input.trustPreset,
     isolatedWorkspacesEnabled: input.isolatedWorkspacesEnabled,
     effectiveExecutionWorkspaceMode: input.effectiveExecutionWorkspaceMode,
+    effectiveExecutionWorkspaceStrategyType:
+      input.effectiveExecutionWorkspaceStrategyType,
     issue: input.issue,
     resolveSelectedEnvironmentDriver: input.resolveSelectedEnvironmentDriver,
   });
@@ -18462,6 +18468,15 @@ export function heartbeatService(
         trustPreset,
         isolatedWorkspacesEnabled,
         effectiveExecutionWorkspaceMode,
+        // Read from mergedConfig (:18270) rather than hostExecutionWorkspaceConfig,
+        // which is only derived below. The provision strip between the two never
+        // changes the strategy type, so the assert sees the same type realization
+        // consumes.
+        effectiveExecutionWorkspaceStrategyType:
+          resolveEffectiveWorkspaceStrategyType(
+            requestedExecutionWorkspaceMode,
+            mergedConfig,
+          ),
         issue: issueRef
           ? {
               companyId: agent.companyId,
