@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveEffectiveWorkspaceStrategyType } from "../services/execution-workspace-policy.ts";
+import {
+  buildExecutionWorkspaceAdapterConfig,
+  resolveEffectiveWorkspaceStrategyType,
+  resolveExecutionWorkspaceMode,
+} from "../services/execution-workspace-policy.ts";
 import { stripHostWorkspaceProvisionForLowTrustSandbox } from "../services/heartbeat.ts";
 import { realizeExecutionWorkspace } from "../services/workspace-runtime.ts";
 import type { TrustPresetResolution } from "../services/trust-preset-resolver.ts";
@@ -156,6 +160,25 @@ describe("ELL-2281: the resolved strategy is computable at the assert's call sit
     }
   });
 
+  it("erases an agent's cloud_sandbox pin for agent_default whenever workspace control is active", () => {
+    // buildExecutionWorkspaceAdapterConfig:388-390 deletes workspaceStrategy for every
+    // mode that is not isolated_workspace. So an agent that pins cloud_sandbox cannot
+    // carry it into the effective config while a project policy is enabled, and the
+    // effective strategy for agent_default is adapter_managed regardless.
+    const agentConfig = { workspaceStrategy: { type: "cloud_sandbox" } };
+
+    const merged = buildExecutionWorkspaceAdapterConfig({
+      agentConfig,
+      projectPolicy: { enabled: true, defaultMode: "adapter_default" } as never,
+      issueSettings: null,
+      mode: "agent_default",
+      legacyUseProjectWorkspace: null,
+    });
+
+    expect(merged.workspaceStrategy).toBeUndefined();
+    expect(resolveEffectiveWorkspaceStrategyType("agent_default", merged)).toBe("adapter_managed");
+  });
+
   it("agrees on the strategy type before and after the low-trust strip when no type is set", () => {
     const config = { workspaceStrategy: { provisionCommand: "bash ./provision.sh" } };
     const stripped = stripHostWorkspaceProvisionForLowTrustSandbox({
@@ -166,5 +189,78 @@ describe("ELL-2281: the resolved strategy is computable at the assert's call sit
 
     expect(resolveEffectiveWorkspaceStrategyType("agent_default", stripped)).toBe("adapter_managed");
     expect(resolveEffectiveWorkspaceStrategyType("agent_default", config)).toBe("adapter_managed");
+  });
+});
+
+describe("ELL-2281: mode isolated_workspace is not itself proof of isolation", () => {
+  // The gap runs the other way from the one the issue asks about. The git_worktree
+  // default at execution-workspace-policy.ts:386 only applies inside the
+  // `hasWorkspaceControl` branch (:380). An agent with no project policy, no issue
+  // workspace overrides and no legacy override resolves mode `shared_workspace`
+  // (:348), which the low-trust guard at heartbeat.ts:17852-17856 upgrades to
+  // `isolated_workspace`. That upgraded mode satisfies the assert at
+  // low-trust-runtime-containment.ts:65, but nothing ever pins a strategy, so
+  // realization falls back to project_primary in the shared checkout.
+  it("resolves shared_workspace when nothing configures workspace control", () => {
+    expect(
+      resolveExecutionWorkspaceMode({
+        projectPolicy: null,
+        issueSettings: null,
+        legacyUseProjectWorkspace: null,
+      }),
+    ).toBe("shared_workspace");
+  });
+
+  it("injects no strategy for the low-trust upgrade when workspace control is inactive", () => {
+    // The mode the low-trust guard hands downstream is isolated_workspace, but the
+    // inputs that would trigger the git_worktree default are all absent.
+    const merged = buildExecutionWorkspaceAdapterConfig({
+      agentConfig: {},
+      projectPolicy: null,
+      issueSettings: null,
+      legacyUseProjectWorkspace: null,
+      mode: "isolated_workspace",
+    });
+
+    expect(merged.workspaceStrategy).toBeUndefined();
+    expect(resolveEffectiveWorkspaceStrategyType("isolated_workspace", merged)).toBe("project_primary");
+  });
+
+  it("realizes that upgraded isolated_workspace run in the unchanged shared checkout", async () => {
+    const base = {
+      baseCwd: "/tmp/ell2281-shared-project-checkout",
+      source: "project_primary" as const,
+      projectId: "project-1",
+      workspaceId: "workspace-1",
+      repoUrl: null,
+      repoRef: null,
+    };
+
+    const realized = await realizeExecutionWorkspace({
+      base,
+      config: {},
+      issue: ISSUE_REF,
+      agent: AGENT_REF,
+    });
+
+    expect(realized.strategy).toBe("project_primary");
+    expect(realized.cwd).toBe(base.baseCwd);
+    expect(realized.worktreePath).toBeNull();
+  });
+
+  it("does inject git_worktree once a project policy turns workspace control on", () => {
+    // Positive control for the branch above: with a policy present the same mode
+    // does get an isolating strategy, which is why this gap is configuration-shaped
+    // rather than universal.
+    const merged = buildExecutionWorkspaceAdapterConfig({
+      agentConfig: {},
+      projectPolicy: { enabled: true, defaultMode: "isolated_workspace" } as never,
+      issueSettings: null,
+      legacyUseProjectWorkspace: null,
+      mode: "isolated_workspace",
+    });
+
+    expect(merged.workspaceStrategy).toEqual({ type: "git_worktree" });
+    expect(resolveEffectiveWorkspaceStrategyType("isolated_workspace", merged)).toBe("git_worktree");
   });
 });
