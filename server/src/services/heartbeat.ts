@@ -310,6 +310,7 @@ import {
   resolveEffectiveWorkspaceStrategyType,
   resolveExecutionWorkspaceEnvironmentId,
   resolveExecutionWorkspaceMode,
+  resolveLowTrustAssertWorkspaceStrategyType,
   resolveSharedWorkspaceConcurrency,
   selectEnvironmentExecutionWorkspaceSettings,
   WORKSPACE_WORKTREE_REQUIRES_PROJECT_CODE,
@@ -18468,15 +18469,17 @@ export function heartbeatService(
         trustPreset,
         isolatedWorkspacesEnabled,
         effectiveExecutionWorkspaceMode,
-        // Read from mergedConfig (:18270) rather than hostExecutionWorkspaceConfig,
-        // which is only derived below. The provision strip between the two never
-        // changes the strategy type, so the assert sees the same type realization
-        // consumes.
+        // Reads mergedConfig (:18277) rather than hostExecutionWorkspaceConfig, which is
+        // only derived below. The provision strip between the two never changes the
+        // strategy type, so the assert sees the same type realization consumes. Kept as an
+        // extracted call rather than an inline expression so it is reachable by test —
+        // see resolveLowTrustAssertWorkspaceStrategyType and ELL-2285. Do not replace this
+        // with a constant: that disarms the ELL-2283 gate.
         effectiveExecutionWorkspaceStrategyType:
-          resolveEffectiveWorkspaceStrategyType(
+          resolveLowTrustAssertWorkspaceStrategyType({
             requestedExecutionWorkspaceMode,
             mergedConfig,
-          ),
+          }),
         issue: issueRef
           ? {
               companyId: agent.companyId,

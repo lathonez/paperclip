@@ -66,6 +66,32 @@ export function resolveEffectiveWorkspaceStrategyType(
   return mode === "agent_default" ? "adapter_managed" : "project_primary";
 }
 
+/**
+ * The strategy type handed to `assertLowTrustWorkspaceIsolation` as
+ * `effectiveExecutionWorkspaceStrategyType`, lifted out of the heartbeat dispatch path so it is
+ * testable (ELL-2285, mirroring what ELL-2280 did for the mode guard).
+ *
+ * This must stay a *resolution* of the run's own config. Replacing it with a constant — or with
+ * anything that does not read `mergedConfig` — disarms the ELL-2283 gate completely: the assert
+ * would certify a strategy the run is not configured for, and the R1-R5 shared-checkout routes the
+ * gate exists to refuse would all be admitted again (reopening ELL-2278/2281/2282). The inline
+ * expression this replaces was unpinned, and hardcoding `"git_worktree"` at the call site left the
+ * whole low-trust suite green. `low-trust-strategy-wiring.test.ts` now pins both this function and
+ * the fact that the call site calls it.
+ *
+ * Reads `mergedConfig` (heartbeat.ts:18277) rather than `hostExecutionWorkspaceConfig`, which is
+ * only derived after the assert has already run. That is safe because the two always agree on the
+ * strategy *type*: `stripHostWorkspaceProvisionForLowTrustSandbox` (heartbeat.ts:1948) deletes only
+ * `provisionCommand` and `runtimeProvisionCommand` and carries `type` through the spread. So the
+ * type certified here is the type `realizeExecutionWorkspace` goes on to consume.
+ */
+export function resolveLowTrustAssertWorkspaceStrategyType(input: {
+  requestedExecutionWorkspaceMode: ParsedExecutionWorkspaceMode;
+  mergedConfig: Record<string, unknown> | null | undefined;
+}): WorkspaceStrategyType {
+  return resolveEffectiveWorkspaceStrategyType(input.requestedExecutionWorkspaceMode, input.mergedConfig);
+}
+
 export function resolvePinnedIssueWorkspaceStrategyType(input: {
   mode: ParsedExecutionWorkspaceMode;
   issueSettings: IssueExecutionWorkspaceSettings | null;
