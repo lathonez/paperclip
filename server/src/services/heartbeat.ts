@@ -310,6 +310,7 @@ import {
   resolveEffectiveWorkspaceStrategyType,
   resolveExecutionWorkspaceEnvironmentId,
   resolveExecutionWorkspaceMode,
+  resolveRequestedExecutionWorkspaceMode,
   resolveSharedWorkspaceConcurrency,
   selectEnvironmentExecutionWorkspaceSettings,
   WORKSPACE_WORKTREE_REQUIRES_PROJECT_CODE,
@@ -17849,11 +17850,10 @@ export function heartbeatService(
         legacyUseProjectWorkspace:
           issueAssigneeOverrides?.useProjectWorkspace ?? null,
       });
-      const requestedExecutionWorkspaceMode =
-        trustPreset.kind === "low_trust_review" &&
-        resolvedExecutionWorkspaceMode === "shared_workspace"
-          ? "isolated_workspace"
-          : resolvedExecutionWorkspaceMode;
+      const requestedExecutionWorkspaceMode = resolveRequestedExecutionWorkspaceMode({
+        trustPresetKind: trustPreset.kind,
+        resolvedExecutionWorkspaceMode,
+      });
       const issueRef = issueContext
         ? {
             id: issueContext.id,

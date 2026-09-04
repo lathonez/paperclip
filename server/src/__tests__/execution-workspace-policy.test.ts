@@ -15,9 +15,12 @@ import {
   resolveExecutionWorkspaceEnvironmentId,
   resolvePinnedIssueWorkspaceStrategyType,
   resolveExecutionWorkspaceMode,
+  resolveRequestedExecutionWorkspaceMode,
   resolveSharedWorkspaceConcurrency,
   selectEnvironmentExecutionWorkspaceSettings,
+  type ParsedExecutionWorkspaceMode,
 } from "../services/execution-workspace-policy.ts";
+import type { TrustPresetResolution } from "../services/trust-preset-resolver.ts";
 
 describe("execution workspace policy helpers", () => {
   it("defaults new issue settings from enabled project policy", () => {
@@ -530,5 +533,90 @@ describe("execution workspace policy helpers", () => {
         true,
       ),
     ).toEqual({ enabled: true, defaultMode: "isolated_workspace" });
+  });
+});
+
+// ELL-2280. This guard used to be an inline expression inside the heartbeat dispatch function, so no
+// test could reach it: the low-trust workspace tests inject effectiveExecutionWorkspaceMode directly.
+// It was possible to widen the guard in a one-line change with the whole suite still green, which is
+// what these cases exist to stop.
+//
+// The decision they pin (ELL-2278): only shared_workspace is upgraded. agent_default and
+// operator_branch are deliberately NOT upgraded. assertLowTrustWorkspaceIsolation
+// (low-trust-runtime-containment.ts) accepts only isolated_workspace and runs before the workspace is
+// resolved, so a low-trust run arriving as agent_default or operator_branch is refused with
+// low_trust_requires_isolated_workspace instead of getting a workspace. That refusal is the intended
+// outcome, not a gap: widening the guard would replace a fail-closed refusal with a silent workspace
+// substitution that overrides an explicit project policy. If you are here because you want to add a
+// mode, reopen ELL-2278 rather than editing these expectations.
+describe("resolveRequestedExecutionWorkspaceMode (low-trust workspace-mode guard)", () => {
+  // Derived from the shared zod enum rather than from ParsedExecutionWorkspaceMode, because a
+  // type-level exhaustiveness check would not be enforced anywhere: server/tsconfig.json excludes
+  // src/__tests__, so tsc never sees this file. Comparing the runtime list against the hand-written
+  // keys below fails if the two ever diverge, in either direction.
+  const PARSED_MODES = issueExecutionWorkspaceSettingsSchema.shape.mode
+    .unwrap()
+    .options.filter(
+      (mode): mode is ParsedExecutionWorkspaceMode => mode !== "inherit" && mode !== "reuse_existing",
+    );
+  const LOW_TRUST_EXPECTATIONS: Record<ParsedExecutionWorkspaceMode, ParsedExecutionWorkspaceMode> = {
+    shared_workspace: "isolated_workspace",
+    isolated_workspace: "isolated_workspace",
+    agent_default: "agent_default",
+    operator_branch: "operator_branch",
+  };
+  // "denied" reaches the guard too: it runs before assertLowTrustWorkspaceIsolation rejects the run.
+  const NON_LOW_TRUST_KINDS: TrustPresetResolution["kind"][] = ["standard", "denied"];
+
+  it("asserts every parsed execution workspace mode", () => {
+    expect([...PARSED_MODES].sort()).toEqual(Object.keys(LOW_TRUST_EXPECTATIONS).sort());
+    expect(PARSED_MODES).toHaveLength(4);
+  });
+
+  it.each(PARSED_MODES)("low_trust_review + %s resolves as decided in ELL-2278", (mode) => {
+    expect(
+      resolveRequestedExecutionWorkspaceMode({
+        trustPresetKind: "low_trust_review",
+        resolvedExecutionWorkspaceMode: mode,
+      }),
+    ).toBe(LOW_TRUST_EXPECTATIONS[mode]);
+  });
+
+  it("upgrades low_trust_review + shared_workspace to isolated_workspace", () => {
+    expect(
+      resolveRequestedExecutionWorkspaceMode({
+        trustPresetKind: "low_trust_review",
+        resolvedExecutionWorkspaceMode: "shared_workspace",
+      }),
+    ).toBe("isolated_workspace");
+  });
+
+  it("does NOT upgrade low_trust_review + agent_default (deliberate: the downstream refusal is intended)", () => {
+    expect(
+      resolveRequestedExecutionWorkspaceMode({
+        trustPresetKind: "low_trust_review",
+        resolvedExecutionWorkspaceMode: "agent_default",
+      }),
+    ).toBe("agent_default");
+  });
+
+  it("does NOT upgrade low_trust_review + operator_branch (deliberate: an explicit operator choice)", () => {
+    expect(
+      resolveRequestedExecutionWorkspaceMode({
+        trustPresetKind: "low_trust_review",
+        resolvedExecutionWorkspaceMode: "operator_branch",
+      }),
+    ).toBe("operator_branch");
+  });
+
+  it.each(
+    NON_LOW_TRUST_KINDS.flatMap((kind) => PARSED_MODES.map((mode) => [kind, mode] as const)),
+  )("passes %s + %s through untouched", (kind, mode) => {
+    expect(
+      resolveRequestedExecutionWorkspaceMode({
+        trustPresetKind: kind,
+        resolvedExecutionWorkspaceMode: mode,
+      }),
+    ).toBe(mode);
   });
 });

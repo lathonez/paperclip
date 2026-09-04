@@ -7,6 +7,7 @@ import type {
   SharedWorkspaceConcurrency,
 } from "@paperclipai/shared";
 import { asString, parseObject } from "../adapters/utils.js";
+import type { TrustPresetResolution } from "./trust-preset-resolver.js";
 
 export type ParsedExecutionWorkspaceMode = Exclude<ExecutionWorkspaceMode, "inherit" | "reuse_existing">;
 
@@ -346,6 +347,28 @@ export function resolveExecutionWorkspaceMode(input: {
     return "agent_default";
   }
   return "shared_workspace";
+}
+
+/**
+ * The low-trust workspace-mode guard, lifted out of the heartbeat dispatch path so it is testable.
+ * Applied to the output of resolveExecutionWorkspaceMode to produce the requested mode.
+ *
+ * Only `shared_workspace` is upgraded. `agent_default` and `operator_branch` are deliberately left
+ * alone (ELL-2278): assertLowTrustWorkspaceIsolation in low-trust-runtime-containment.ts accepts
+ * *only* `isolated_workspace`, and it runs before any workspace is resolved, so a low-trust run that
+ * arrives here as `agent_default` or `operator_branch` is refused with
+ * `low_trust_requires_isolated_workspace` rather than getting a reused directory. That refusal is the
+ * intended outcome, not a gap. Widening this to `agent_default` would convert a fail-closed refusal
+ * into a silent workspace substitution that overrides an explicit project policy, so do not add modes
+ * here without reopening ELL-2278.
+ */
+export function resolveRequestedExecutionWorkspaceMode(input: {
+  trustPresetKind: TrustPresetResolution["kind"];
+  resolvedExecutionWorkspaceMode: ParsedExecutionWorkspaceMode;
+}): ParsedExecutionWorkspaceMode {
+  return input.trustPresetKind === "low_trust_review" && input.resolvedExecutionWorkspaceMode === "shared_workspace"
+    ? "isolated_workspace"
+    : input.resolvedExecutionWorkspaceMode;
 }
 
 function parseSharedWorkspaceConcurrency(raw: unknown): SharedWorkspaceConcurrency | undefined {
